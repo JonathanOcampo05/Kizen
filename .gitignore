@@ -136,3 +136,7 @@ crashlytics-build.properties
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Capturas tomadas vía MCP
+/[Aa]ssets/Screenshots/
+/[Aa]ssets/Screenshots.meta

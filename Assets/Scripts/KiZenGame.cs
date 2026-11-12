@@ -1,124 +1,156 @@
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem;
-#endif
 using UnityEngine.SceneManagement;
 
-// Punto de entrada: pon este script en un GameObject vacío y dale Play.
-// Construye fondo, jugador, spawner y UI por código.
+// Controlador principal de Ki Zen. Pon este script en un GameObject vacío y dale Play:
+// construye cámara, escenario, jugador, enemigos y UI por código.
 public class KiZenGame : MonoBehaviour
 {
     public static KiZenGame Instance { get; private set; }
 
-    public int lives = 3;
-    public float spawnInterval = 1.5f;
+    /// Piloto automático para pruebas (se activa desde el menú Ki Zen > AutoPilot).
+    public static bool AutoPilot
+    {
+        get
+        {
+#if UNITY_EDITOR
+            return UnityEditor.EditorPrefs.GetBool("KiZen.AutoPilot", false);
+#else
+            return false;
+#endif
+        }
+    }
+
+    enum State { Title, Playing, GameOver }
+
+    public int startLives = 3;
+    public float levelDuration = 20f;
 
     public int Score { get; private set; }
-    public bool GameOver { get; private set; }
+    public int Lives { get; private set; }
+    public int Level { get; private set; }
+    public bool GameOver => state == State.GameOver;
 
-    float nextSpawn;
-    Sprite spiritSprite;
+    State state;
+    float stateTime, levelTimer, nextSpawn;
+    int best;
+    PlayerController player;
     GUIStyle style;
 
     void Awake()
     {
         Instance = this;
+        Spirit.All.Clear();
         Time.timeScale = 1f;
     }
 
     void Start()
+    {
+        SetupCamera();
+        ZenGarden.Build();
+
+        var p = new GameObject("Player");
+        p.transform.position = new Vector3(0, ZenGarden.GroundY - 0.75f, 0);
+        player = p.AddComponent<PlayerController>();
+
+        best = PlayerPrefs.GetInt("KiZen.Best", 0);
+        Lives = startLives;
+        state = State.Title;
+    }
+
+    void SetupCamera()
     {
         var cam = Camera.main;
         if (cam == null)
         {
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
             cam = camGo.AddComponent<Camera>();
+            camGo.AddComponent<AudioListener>();
         }
         cam.orthographic = true;
         cam.orthographicSize = 5f;
-        cam.transform.position = new Vector3(0, 0, -10);
-        cam.backgroundColor = new Color(0.93f, 0.9f, 0.82f); // arena zen
+        cam.transform.SetPositionAndRotation(new Vector3(0, 0, -10), Quaternion.identity);
+        cam.backgroundColor = new Color(0.09f, 0.08f, 0.2f);
         cam.clearFlags = CameraClearFlags.SolidColor;
-
-        // Línea de arena / jardín
-        var ground = new GameObject("Garden");
-        ground.transform.position = new Vector3(0, -4.6f, 0);
-        ground.transform.localScale = new Vector3(20, 1.6f, 1);
-        var gsr = ground.AddComponent<SpriteRenderer>();
-        gsr.sprite = Sprites.Square(new Color(0.75f, 0.72f, 0.6f));
-        gsr.sortingOrder = -1;
-
-        // Jugador (monje)
-        var player = new GameObject("Player");
-        player.transform.position = new Vector3(0, -3.6f, 0);
-        player.transform.localScale = new Vector3(0.9f, 1.3f, 1f);
-        var psr = player.AddComponent<SpriteRenderer>();
-        psr.sprite = Sprites.Square(new Color(0.9f, 0.45f, 0.1f));
-        psr.sortingOrder = 1;
-        player.AddComponent<PlayerController>();
-
-        spiritSprite = Sprites.Circle(new Color(0.15f, 0.1f, 0.25f));
     }
 
     void Update()
     {
-        if (GameOver)
+        stateTime += Time.deltaTime;
+        switch (state)
         {
-            bool restart;
-#if ENABLE_INPUT_SYSTEM
-            restart = Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame;
-#else
-            restart = Input.GetKeyDown(KeyCode.R);
-#endif
-            if (restart) SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
-            return;
-        }
+            case State.Title:
+                if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || (AutoPilot && stateTime > 1f))
+                    StartGame();
+                break;
 
-        if (Time.time >= nextSpawn)
-        {
-            // Se vuelve más rápido con el puntaje
-            nextSpawn = Time.time + Mathf.Max(0.5f, spawnInterval - Score * 0.005f);
-            SpawnSpirit();
+            case State.Playing:
+                levelTimer += Time.deltaTime;
+                if (levelTimer >= levelDuration) { levelTimer = 0f; Level++; }
+                if (Time.time >= nextSpawn) SpawnSpirit();
+                break;
+
+            case State.GameOver:
+                if (stateTime > 1f && (Input.GetKeyDown(KeyCode.R) || Input.GetKeyDown(KeyCode.Space) || (AutoPilot && stateTime > 4f)))
+                    SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                break;
         }
+    }
+
+    void SetState(State s) { state = s; stateTime = 0f; }
+
+    void StartGame()
+    {
+        Score = 0;
+        Lives = startLives;
+        Level = 1;
+        levelTimer = 0f;
+        nextSpawn = Time.time + 1f;
+        player.SetControl(true);
+        SetState(State.Playing);
     }
 
     void SpawnSpirit()
     {
-        var go = new GameObject("Spirit");
-        go.transform.position = new Vector3(Random.Range(-8f, 8f), 6f, 0);
-        go.transform.localScale = Vector3.one * 0.9f;
-        var sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite = spiritSprite;
-        sr.sortingOrder = 1;
-        var rb = go.AddComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Kinematic;
-        go.AddComponent<CircleCollider2D>();
-        var s = go.AddComponent<Spirit>();
-        s.speed = 2f + Score * 0.01f;
+        nextSpawn = Time.time + Mathf.Max(0.45f, 1.5f - Level * 0.13f) * Random.Range(0.8f, 1.2f);
+        var cam = Camera.main;
+        float half = Mathf.Min(cam.orthographicSize * cam.aspect, 11f) - 1f;
+        bool oni = Level >= 2 && Random.value < Mathf.Min(0.35f, 0.08f + Level * 0.05f);
+        float spd = oni ? 0.9f + Level * 0.08f : 1.5f + Level * 0.17f;
+        Spirit.Spawn(new Vector3(Random.Range(-half, half), 6.2f, 0), oni, spd);
     }
 
-    public void AddScore(int amount) => Score += amount;
-
-    public void LoseLife()
+    public void OnSpiritKilled(Spirit s)
     {
-        lives--;
-        if (lives <= 0) GameOver = true;
+        if (state != State.Playing) return;
+        Score += s.Points;
     }
 
+    public void OnSpiritReached(Spirit s)
+    {
+        if (state != State.Playing) return;
+        Lives--;
+        if (Lives <= 0) EndGame();
+    }
+
+    void EndGame()
+    {
+        SetState(State.GameOver);
+        player.Defeat();
+        for (int i = Spirit.All.Count - 1; i >= 0; i--) Spirit.All[i].Dissolve();
+        if (Score > best) { best = Score; PlayerPrefs.SetInt("KiZen.Best", best); }
+    }
+
+    // UI provisional (se reemplaza por TextMeshPro más adelante)
     void OnGUI()
     {
         if (style == null)
         {
             style = new GUIStyle(GUI.skin.label) { fontSize = 28, fontStyle = FontStyle.Bold };
-            style.normal.textColor = new Color(0.2f, 0.15f, 0.1f);
+            style.normal.textColor = Color.white;
         }
-        GUI.Label(new Rect(20, 10, 400, 40), $"Puntaje: {Score}", style);
-        GUI.Label(new Rect(20, 50, 400, 40), $"Vidas: {Mathf.Max(0, lives)}", style);
-        if (GameOver)
-        {
-            var big = new GUIStyle(style) { fontSize = 48, alignment = TextAnchor.MiddleCenter };
-            GUI.Label(new Rect(0, Screen.height / 2f - 60, Screen.width, 60), "Game Over", big);
-            GUI.Label(new Rect(0, Screen.height / 2f, Screen.width, 50), "Presiona R para reiniciar", style.fontSize > 0 ? new GUIStyle(style) { alignment = TextAnchor.MiddleCenter } : style);
-        }
+        GUI.Label(new Rect(20, 10, 400, 40), $"Puntaje: {Score}   Vidas: {Mathf.Max(0, Lives)}   Ola: {Level}", style);
+        var center = new GUIStyle(style) { alignment = TextAnchor.MiddleCenter };
+        if (state == State.Title) GUI.Label(new Rect(0, Screen.height / 2f - 30, Screen.width, 60), "KI ZEN - Presiona ESPACIO", center);
+        if (state == State.GameOver) GUI.Label(new Rect(0, Screen.height / 2f - 30, Screen.width, 60), $"Game Over - {Score} pts - R para reiniciar", center);
     }
 }

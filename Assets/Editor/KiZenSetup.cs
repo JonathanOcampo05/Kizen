@@ -40,5 +40,12 @@ public static class KiZenSetup
 
     // Usado en modo batch: Unity.exe -batchmode -executeMethod KiZenSetup.BatchSetup -quit
     public static void BatchSetup() => SetupScene();
+
+    // Piloto automático para probar el juego sin teclado (útil al verificar vía MCP).
+    [MenuItem("Ki Zen/AutoPilot On")]
+    public static void AutoPilotOn() { EditorPrefs.SetBool("KiZen.AutoPilot", true); Debug.Log("[Ki Zen] AutoPilot ON"); }
+
+    [MenuItem("Ki Zen/AutoPilot Off")]
+    public static void AutoPilotOff() { EditorPrefs.SetBool("KiZen.AutoPilot", false); Debug.Log("[Ki Zen] AutoPilot OFF"); }
 }
 #endif
