@@ -39,6 +39,7 @@ public class KiZenGame : MonoBehaviour
     void Awake()
     {
         Instance = this;
+        Application.runInBackground = true;
         Spirit.All.Clear();
         Time.timeScale = 1f;
     }
@@ -47,6 +48,7 @@ public class KiZenGame : MonoBehaviour
     {
         SetupCamera();
         ZenGarden.Build();
+        Sfx.Init(gameObject);
 
         var p = new GameObject("Player");
         p.transform.position = new Vector3(0, ZenGarden.GroundY - 0.75f, 0);
@@ -71,11 +73,13 @@ public class KiZenGame : MonoBehaviour
         cam.transform.SetPositionAndRotation(new Vector3(0, 0, -10), Quaternion.identity);
         cam.backgroundColor = new Color(0.09f, 0.08f, 0.2f);
         cam.clearFlags = CameraClearFlags.SolidColor;
+        if (!cam.GetComponent<CameraShake>()) cam.gameObject.AddComponent<CameraShake>();
     }
 
     void Update()
     {
         stateTime += Time.deltaTime;
+        Sfx.AmbientVolume = Mathf.MoveTowards(Sfx.AmbientVolume, 0.35f, Time.deltaTime * 0.15f);
         switch (state)
         {
             case State.Title:
@@ -85,7 +89,7 @@ public class KiZenGame : MonoBehaviour
 
             case State.Playing:
                 levelTimer += Time.deltaTime;
-                if (levelTimer >= levelDuration) { levelTimer = 0f; Level++; }
+                if (levelTimer >= levelDuration) { levelTimer = 0f; Level++; Sfx.PlayBowl(); }
                 if (Time.time >= nextSpawn) SpawnSpirit();
                 break;
 
@@ -106,6 +110,7 @@ public class KiZenGame : MonoBehaviour
         levelTimer = 0f;
         nextSpawn = Time.time + 1f;
         player.SetControl(true);
+        Sfx.PlayBowlLow();
         SetState(State.Playing);
     }
 
@@ -136,6 +141,8 @@ public class KiZenGame : MonoBehaviour
     {
         SetState(State.GameOver);
         player.Defeat();
+        Sfx.PlayGong();
+        CameraShake.Add(1f);
         for (int i = Spirit.All.Count - 1; i >= 0; i--) Spirit.All[i].Dissolve();
         if (Score > best) { best = Score; PlayerPrefs.SetInt("KiZen.Best", best); }
     }

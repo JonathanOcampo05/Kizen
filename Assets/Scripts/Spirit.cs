@@ -78,6 +78,8 @@ public class Spirit : MonoBehaviour
         if (dead) return;
         hp -= damage;
         flash = 1f;
+        Fx.SpiritHit(transform.position, IsOni);
+        Sfx.PlayHit();
         if (hp <= 0) { Die(); return; }
         transform.position += Vector3.up * 0.18f;
     }
@@ -85,6 +87,9 @@ public class Spirit : MonoBehaviour
     void Die()
     {
         dead = true;
+        Fx.SpiritDeath(transform.position, IsOni);
+        Sfx.PlayKill();
+        CameraShake.Add(IsOni ? 0.35f : 0.15f);
         if (KiZenGame.Instance) KiZenGame.Instance.OnSpiritKilled(this);
         Destroy(gameObject);
     }
@@ -93,6 +98,9 @@ public class Spirit : MonoBehaviour
     void Corrupt()
     {
         dead = true;
+        Fx.Corruption(transform.position);
+        Sfx.PlayGong();
+        CameraShake.Add(0.6f);
         if (KiZenGame.Instance) KiZenGame.Instance.OnSpiritReached(this);
         Destroy(gameObject);
     }
@@ -101,6 +109,7 @@ public class Spirit : MonoBehaviour
     public void Dissolve()
     {
         dead = true;
+        Fx.SpiritDeath(transform.position, IsOni);
         Destroy(gameObject);
     }
 }

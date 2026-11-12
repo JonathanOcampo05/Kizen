@@ -69,7 +69,10 @@ public class PlayerController : MonoBehaviour
     {
         nextShot = Time.time + cooldown;
         recoil = 1f;
-        KiBall.Spawn(transform.position + new Vector3(0, 0.62f, 0), false);
+        var firePos = transform.position + new Vector3(0, 0.8f, 0);
+        KiBall.Spawn(firePos, false);
+        Fx.Muzzle(firePos, false);
+        Sfx.PlayShoot();
     }
 
     /// Defeat: el monje cae de rodillas (se aplana y oscurece).
